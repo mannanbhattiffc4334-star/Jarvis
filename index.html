@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050B12">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jarvis">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
+<title>Jarvis</title>
+<style>
+  :root{
+    --bg: #050B12;
+    --panel: #0A1620;
+    --panel-border: #163449;
+    --text: #CFEFFF;
+    --text-dim: #5C86A0;
+    --cyan: #35D9FF;
+    --cyan-bright: #B6F4FF;
+    --cyan-dim: #144B60;
+    --warn: #FF9E4D;
+    --warn-dim: #5C3A1E;
+    --energy: 0;
+  }
+
+  *{ box-sizing: border-box; }
+  html, body{ height: 100%; }
+  body{
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Mono", "JetBrains Mono", "SF Mono", "SFMono-Regular", Menlo, Consolas, "Roboto Mono", monospace;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100dvh;
+  }
+  body::after{
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse at 50% 22%, rgba(53,217,255,0.05) 0%, rgba(0,0,0,0) 45%),
+      radial-gradient(ellipse at 50% 28%, rgba(0,0,0,0) 0%, rgba(0,0,0,0.62) 100%);
+    z-index: 49;
+  }
+  body::before{
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(to bottom, rgba(53,217,255,0.02) 0px, rgba(53,217,255,0.02) 1px, transparent 1px, transparent 3px);
+    opacity: .5;
+    z-index: 48;
+  }
+  :focus-visible{ outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+  .app{
+    position: relative;
+    max-width: 520px;
+    margin: 0 auto;
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  }
+
+  /* ---------- Header ---------- */
+  .topbar{
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 2px 12px;
+    border-bottom: 1px solid var(--panel-border);
+    margin-bottom: 2px;
+  }
+  .brand{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 16px;
+    letter-spacing: 0.16em;
+    color: var(--cyan-bright);
+    text-shadow: 0 0 14px rgba(53,217,255,0.4);
+  }
+  .brand-dot{
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--cyan-dim);
+    box-shadow: 0 0 0 rgba(53,217,255,0);
+    transition: background .3s ease, box-shadow .3s ease;
+  }
+  .brand-dot.is-ready{
+    background: var(--cyan);
+    box-shadow: 0 0 8px 1px rgba(53,217,255,0.8);
+    animation: dotPulse 2.4s ease-in-out infinite;
+  }
+  @keyframes dotPulse{ 0%,100%{ opacity: 1; } 50%{ opacity: .45; } }
+  .icon-btn{
+    margin-left: auto;
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--text-dim);
+    width: 34px; height: 34px;
+    border-radius: 4px;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    transition: color .2s ease, border-color .2s ease, transform .15s ease;
+  }
+  .icon-btn:hover{ color: var(--cyan); border-color: var(--cyan-dim); }
+  .icon-btn:active{ transform: scale(0.92); }
+
+  .note{
+    margin: 6px 2px 0;
+    font-size: 12px;
+    color: var(--warn);
+    border: 1px solid var(--warn);
+    background: rgba(255,158,77,0.08);
+    padding: 8px 10px;
+    border-radius: 3px;
+    line-height: 1.5;
+    animation: slideDown .25s ease;
+  }
+  @keyframes slideDown{ from{ opacity: 0; transform: translateY(-6px); } to{ opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn{ from{ opacity: 0; transform: translateY(4px); } to{ opacity: 1; transform: translateY(0); } }
+
+  /* ---------- HUD ---------- */
+  .hud-frame{
+    position: relative;
+    width: min(80vw, 300px);
+    aspect-ratio: 1;
+    margin: 18px auto 6px;
+  }
+  .ring{ position: absolute; border-radius: 50%; transition: opacity .4s ease, border-color .4s ease; }
+  .ring--outer{
+    inset: 2%;
+    border: 1px solid var(--cyan-dim);
+    animation: spin 60s linear infinite;
+    opacity: .35;
+  }
+  .ring--mid{
+    inset: 12%;
+    border: 2px dashed var(--cyan-dim);
+    animation: spinRev 34s linear infinite;
+    opacity: .4;
+  }
+  .ring--ticks{
+    inset: 0;
+    background: repeating-conic-gradient(var(--cyan-dim) 0deg 1.2deg, transparent 1.2deg 9deg);
+    -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 12px), #000 calc(100% - 11px), #000 100%);
+            mask: radial-gradient(farthest-side, transparent calc(100% - 12px), #000 calc(100% - 11px), #000 100%);
+    animation: spin 90s linear infinite;
+    opacity: .5;
+  }
+  @keyframes spin{ to{ transform: rotate(360deg); } }
+  @keyframes spinRev{ to{ transform: rotate(-360deg); } }
+
+  .hud-frame[data-state="listening"] .ring{ opacity: .85; }
+  .hud-frame[data-state="listening"] .ring--outer{ animation-duration: 26s; }
+  .hud-frame[data-state="listening"] .ring--mid{ animation-duration: 16s; }
+  .hud-frame[data-state="thinking"] .ring{ opacity: 1; border-color: var(--warn-dim); }
+  .hud-frame[data-state="thinking"] .ring--outer{ animation-duration: 7s; border-color: var(--warn); }
+  .hud-frame[data-state="thinking"] .ring--mid{ animation-duration: 5s; border-color: var(--warn); }
+  .hud-frame[data-state="thinking"] .ring--ticks{ background: repeating-conic-gradient(var(--warn-dim) 0deg 1.2deg, transparent 1.2deg 9deg); }
+  .hud-frame[data-state="speaking"] .ring{ opacity: .9; }
+  .hud-frame[data-state="speaking"] .ring--outer{ animation-duration: 20s; }
+
+  .core{
+    position: absolute;
+    inset: 30%;
+    border-radius: 50%;
+    border: 1px solid var(--cyan-dim);
+    background: var(--panel);
+    color: var(--cyan-bright);
+    display: flex; align-items: center; justify-content: center;
+    text-align: center;
+    cursor: pointer;
+    padding: 8px;
+    transition: border-color .3s ease, transform .2s ease;
+  }
+  .core:hover{ border-color: var(--cyan); }
+  .core:active{ transform: scale(0.96); }
+  .hud-frame[data-state="listening"] .core,
+  .hud-frame[data-state="speaking"] .core{ border-color: var(--cyan); }
+  .hud-frame[data-state="thinking"] .core{ border-color: var(--warn); color: #FFDCB8; }
+
+  .core-glow{
+    position: absolute; inset: -4%;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--cyan) 0%, transparent 68%);
+    opacity: calc(0.28 + var(--energy) * 0.55);
+    transform: scale(calc(1 + var(--energy) * 0.22));
+    pointer-events: none;
+  }
+  .hud-frame[data-state="thinking"] .core-glow{ background: radial-gradient(circle, var(--warn) 0%, transparent 68%); }
+  .hud-frame[data-state="off"] .core-glow{ opacity: .12; }
+
+  .core-label{
+    position: relative;
+    font-size: 11.5px;
+    letter-spacing: 0.08em;
+    line-height: 1.5;
+    max-width: 92%;
+    word-break: break-word;
+  }
+
+  .hud-readout{
+    position: absolute;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .hud-readout--tl{ top: 0; left: 2%; }
+  .hud-readout--tr{ top: 0; right: 2%; text-align: right; }
+  .hud-readout--bl{ bottom: 0; left: 2%; }
+  .hud-readout--br{ bottom: 0; right: 2%; text-align: right; }
+  .hud-readout .val{ color: var(--cyan); }
+  .hud-frame[data-state="thinking"] .hud-readout--tr .val{ color: var(--warn); }
+
+  .live-line{
+    margin-top: 10px;
+    min-height: 16px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  /* ---------- Log ---------- */
+  .log{
+    margin-top: 12px;
+    flex: 1;
+    min-height: 100px;
+    overflow-y: auto;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    border-radius: 4px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .log-empty{
+    color: var(--text-dim);
+    font-size: 12.5px;
+    line-height: 1.6;
+    margin: auto 0;
+    text-align: center;
+  }
+  .log-entry{ font-size: 14px; line-height: 1.55; }
+  .log-entry .who{ display: block; font-size: 10.5px; letter-spacing: 0.12em; margin-bottom: 3px; }
+  .log-entry--user .who{ color: var(--text-dim); }
+  .log-entry--assistant .who{ color: var(--cyan); }
+  .log-entry--user .txt{ color: var(--text); }
+  .log-entry--assistant .txt{ color: var(--cyan-bright); }
+
+  /* ---------- Settings ---------- */
+  .settings-panel{
+    margin-top: 12px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    border-radius: 4px;
+    padding: 14px;
+    animation: slideDown .22s ease;
+  }
+  .log-entry{ animation: fadeIn .25s ease; }
+  .settings-row{ display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 13px; }
+  .settings-row label{ color: var(--text-dim); font-size: 12px; letter-spacing: 0.04em; }
+  .settings-row input[type="text"], .settings-row input[type="password"], .settings-row select{
+    background: var(--bg);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 9px 10px;
+    border-radius: 3px;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  .settings-row input[type="text"]:focus, .settings-row input[type="password"]:focus, .settings-row select:focus{
+    border-color: var(--cyan-dim);
+    box-shadow: 0 0 0 3px rgba(53,217,255,0.1);
+    outline: none;
+  }
+  .settings-note{ font-size: 11.5px; color: var(--text-dim); line-height: 1.5; margin: 0 0 12px; }
+  .contacts-list{ display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .contact-row{
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--bg); border: 1px solid var(--panel-border); border-radius: 3px;
+    padding: 7px 9px; font-size: 12.5px; color: var(--text);
+  }
+  .contact-del{
+    background: transparent; border: none; color: var(--text-dim);
+    font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px;
+  }
+  .contact-del:hover{ color: var(--warn); }
+  .contact-empty{ font-size: 12px; color: var(--text-dim); margin-bottom: 8px; }
+  .contact-add-row{ display: flex; gap: 6px; }
+  .contact-add-row input{
+    background: var(--bg); border: 1px solid var(--panel-border); color: var(--text);
+    font-family: inherit; font-size: 12.5px; padding: 8px 9px; border-radius: 3px;
+  }
+  .contact-add-row input:first-child{ flex: 1.2; min-width: 0; }
+  .contact-add-row input:nth-child(2){ flex: 1; min-width: 0; }
+  .settings-actions{ display: flex; gap: 10px; flex-wrap: wrap; }
+  .text-btn{
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    padding: 8px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    transition: color .2s ease, border-color .2s ease, transform .15s ease;
+  }
+  .text-btn:hover{ color: var(--cyan); border-color: var(--cyan-dim); }
+  .text-btn:active{ transform: scale(0.95); }
+
+  /* ---------- Text input ---------- */
+  .controls{ margin-top: 12px; padding: 10px 0 16px; }
+  .text-form{ width: 100%; display: flex; gap: 8px; }
+  .text-form input{
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 14px;
+    padding: 11px 12px;
+    border-radius: 4px;
+    transition: border-color .2s ease, box-shadow .2s ease;
+  }
+  .text-form input:focus{
+    border-color: var(--cyan-dim);
+    box-shadow: 0 0 0 3px rgba(53,217,255,0.1);
+    outline: none;
+  }
+  .text-form input::placeholder{ color: var(--text-dim); }
+  .send-btn{
+    background: transparent;
+    border: 1px solid var(--panel-border);
+    color: var(--text-dim);
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    padding: 0 16px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: color .2s ease, border-color .2s ease, transform .15s ease;
+  }
+  .send-btn:hover{ color: var(--cyan); border-color: var(--cyan-dim); }
+  .send-btn:active{ transform: scale(0.94); }
+
+  @media (prefers-reduced-motion: reduce){
+    .ring{ animation: none !important; }
+    .core{ transition: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">JARVIS <span class="brand-dot" id="brandDot" aria-hidden="true"></span></div>
+      <button id="settingsBtn" class="icon-btn" type="button" aria-label="Open settings">⚙</button>
+    </header>
+
+    <div class="note" id="noteBar" hidden></div>
+
+    <div class="hud-frame" id="hudFrame" data-state="off">
+      <div class="ring ring--outer"></div>
+      <div class="ring ring--mid"></div>
+      <div class="ring ring--ticks"></div>
+      <div class="hud-readout hud-readout--tl">TIME <span class="val" id="readoutTime">00:00:00</span></div>
+      <div class="hud-readout hud-readout--tr">STATUS <span class="val" id="readoutStatus">OFF</span></div>
+      <div class="hud-readout hud-readout--bl">AUDIO <span class="val" id="readoutAudio">░░░░░░░░</span></div>
+      <div class="hud-readout hud-readout--br" id="readoutWake">TAP TO ARM</div>
+      <button class="core" id="orbBtn" type="button" aria-label="Activate Jarvis">
+        <span class="core-glow"></span>
+        <span class="core-label" id="coreLabel">TAP TO<br>ACTIVATE</span>
+      </button>
+    </div>
+
+    <div class="live-line" id="liveLine">One tap arms hands-free listening. You can also just type below.</div>
+
+    <div class="log" id="log" aria-live="polite">
+      <div class="log-empty" id="logEmpty">No conversation yet.</div>
+    </div>
+
+    <div class="settings-panel" id="settingsPanel" hidden>
+      <div class="settings-row">
+        <label for="apiKeyInput">Anthropic API key</label>
+        <input id="apiKeyInput" type="password" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+      </div>
+      <p class="settings-note" id="apiKeyNote">Jarvis needs your own key to think. It's stored only on this device and sent straight to Anthropic — never anywhere else. Get one at console.anthropic.com.</p>
+      <div class="settings-row">
+        <label for="nameInput">Your name (optional)</label>
+        <input id="nameInput" type="text" placeholder="e.g. Alex" autocomplete="off">
+      </div>
+      <div class="settings-row">
+        <label for="wakeWordInput">Wake word</label>
+        <input id="wakeWordInput" type="text" value="jarvis" autocomplete="off">
+      </div>
+      <div class="settings-row">
+        <label for="voiceSelect">Voice</label>
+        <select id="voiceSelect"></select>
+      </div>
+      <div class="settings-row">
+        <label>Contacts (say "call ___", "text ___", or "WhatsApp ___")</label>
+        <div class="contacts-list" id="contactsList"></div>
+        <div class="contact-add-row">
+          <input id="contactNameInput" type="text" placeholder="Name" autocomplete="off">
+          <input id="contactPhoneInput" type="tel" placeholder="+1 555 555 5555" autocomplete="off">
+          <button id="addContactBtn" type="button" class="text-btn">ADD</button>
+        </div>
+      </div>
+      <p class="settings-note">Jarvis can search the web, and can call, text, or WhatsApp anyone saved above by name. It can only reach numbers you've saved yourself — it can't dial or message anyone else. Calls and texts still need one tap to confirm; that's a phone-security limit no app can bypass. It doesn't control calendars, email, or other accounts yet.</p>
+      <p class="settings-note" id="sttNote" hidden>Voice input isn't supported in this browser — try Chrome or Safari with dictation enabled. Typing still works everywhere.</p>
+      <div class="settings-actions">
+        <button id="clearBtn" class="text-btn" type="button">CLEAR CONVERSATION</button>
+        <button id="closeSettingsBtn" class="text-btn" type="button">CLOSE</button>
+      </div>
+    </div>
+
+    <footer class="controls">
+      <form id="textForm" class="text-form">
+        <input id="textInput" type="text" placeholder="Type a message…" autocomplete="off" aria-label="Type a message">
+        <button type="submit" class="send-btn">SEND</button>
+      </form>
+    </footer>
+  </div>
+
+<script>
+(function(){
+  'use strict';
+
+  // ---------- Elements ----------
+  var brandDot = document.getElementById('brandDot');
+  var noteBar = document.getElementById('noteBar');
+  var hudFrame = document.getElementById('hudFrame');
+  var orbBtn = document.getElementById('orbBtn');
+  var coreLabel = document.getElementById('coreLabel');
+  var readoutTime = document.getElementById('readoutTime');
+  var readoutStatus = document.getElementById('readoutStatus');
+  var readoutAudio = document.getElementById('readoutAudio');
+  var readoutWake = document.getElementById('readoutWake');
+  var liveLine = document.getElementById('liveLine');
+  var logEl = document.getElementById('log');
+  var logEmpty = document.getElementById('logEmpty');
+  var settingsBtn = document.getElementById('settingsBtn');
+  var settingsPanel = document.getElementById('settingsPanel');
+  var closeSettingsBtn = document.getElementById('closeSettingsBtn');
+  var clearBtn = document.getElementById('clearBtn');
+  var apiKeyInput = document.getElementById('apiKeyInput');
+  var apiKeyNote = document.getElementById('apiKeyNote');
+  var nameInput = document.getElementById('nameInput');
+  var wakeWordInput = document.getElementById('wakeWordInput');
+  var voiceSelect = document.getElementById('voiceSelect');
+  var contactsList = document.getElementById('contactsList');
+  var contactNameInput = document.getElementById('contactNameInput');
+  var contactPhoneInput = document.getElementById('contactPhoneInput');
+  var addContactBtn = document.getElementById('addContactBtn');
+  var sttNote = document.getElementById('sttNote');
+  var textForm = document.getElementById('textForm');
+  var textInput = document.getElementById('textInput');
+
+  // ---------- State ----------
+  var state = {
+    status: 'off', // off | listening | thinking | speaking
+    active: false,
+    wakeWord: 'jarvis',
+    apiKey: '',
+    userName: '',
+    history: [],
+    voices: [],
+    selectedVoiceURI: null,
+    contacts: [],
+    energy: 0,
+    awaitingCommand: false
+  };
+
+  var recognition = null;
+  var recognitionActive = false;
+  var manualStop = true;
+  var ttsPrimed = false;
+  var reducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function systemPrompt(){
+    var lines = [
+      'You are JARVIS, a sharp, warm, capable personal AI assistant talking with your user through a live voice interface on their phone or computer.',
+      'You are speaking OUT LOUD through text-to-speech, and the same text is shown as a plain transcript — so never use markdown: no asterisks, no bullet or numbered lists, no headers, no code blocks. Write in natural flowing sentences. If you need structure, use words like "first," "also," and "one more thing" instead of symbols.',
+      'Keep answers conversational and reasonably concise, the way a sharp assistant would speak out loud. Expand only when the user clearly wants depth or asks a complex question.',
+      'You may be warm and a little dry-witted, but stay genuinely useful and direct.',
+      'You have live web search available for current information, news, prices, and facts beyond your training. Use it when it would genuinely help, and speak results in plain sentences rather than reading out links.',
+      'You do not have control over calendars, email, or other accounts yet.'
+    ];
+    if (state.contacts.length){
+      lines.push('The user has these saved contacts you may call, text, or WhatsApp by name: ' + state.contacts.map(function(c){ return c.name; }).join(', ') + '. To do one of those, make the very first line of your reply exactly one of: "ACTION:CALL:<name>", "ACTION:TEXT:<name>:<message>", or "ACTION:WHATSAPP:<name>:<message>", using the contact name exactly as listed and nothing before it on that line. On the next line, write a short natural spoken confirmation, like "Calling Sam now." or "Texting Jess: on my way.". Only ever use a name from that exact list — never invent or guess a contact.');
+    } else {
+      lines.push('The user has no saved contacts yet. If they ask you to call, text, or WhatsApp someone, tell them to add that person in settings first — never invent a name or number.');
+    }
+    if (state.userName){ lines.push('The user\'s name is ' + state.userName + '. You may address them by name occasionally, not every line.'); }
+    return lines.join('\n');
+  }
+
+  // ---------- Status / HUD ----------
+  function setStatus(s){
+    state.status = s;
+    hudFrame.dataset.state = s;
+    readoutStatus.textContent = s.toUpperCase();
+    updateCoreLabel();
+  }
+
+  function goInactive(){
+    state.active = false;
+    state.awaitingCommand = false;
+    manualStop = true;
+    if (recognition && recognitionActive){ try { recognition.stop(); } catch(err){} }
+    state.status = 'listening';
+    hudFrame.dataset.state = 'off';
+    readoutStatus.textContent = 'OFF';
+    updateCoreLabel();
+  }
+
+  function updateCoreLabel(interimText){
+    if (state.status === 'thinking'){
+      coreLabel.textContent = 'THINKING…';
+      readoutWake.textContent = state.active ? ('WAKE "' + state.wakeWord.toUpperCase() + '"') : 'TAP TO ARM';
+      return;
+    }
+    if (state.status === 'speaking'){
+      coreLabel.textContent = 'SPEAKING…';
+      readoutWake.textContent = state.active ? ('WAKE "' + state.wakeWord.toUpperCase() + '"') : 'TAP TO ARM';
+      return;
+    }
+    if (!state.active){
+      coreLabel.innerHTML = 'TAP TO<br>ACTIVATE';
+      readoutWake.textContent = 'TAP TO ARM';
+      return;
+    }
+    readoutWake.textContent = 'WAKE "' + state.wakeWord.toUpperCase() + '"';
+    if (state.awaitingCommand){ coreLabel.textContent = 'YES?'; return; }
+    if (interimText){ coreLabel.textContent = interimText; return; }
+    coreLabel.innerHTML = 'LISTENING<br>FOR "' + state.wakeWord.toUpperCase() + '"';
+  }
+
+  function showNote(msg){ noteBar.textContent = msg; noteBar.hidden = false; }
+  function clearNote(){ noteBar.hidden = true; }
+
+  // live clock
+  function tickClock(){
+    var d = new Date();
+    function pad(n){ return (n < 10 ? '0' : '') + n; }
+    readoutTime.textContent = pad(d.getHours()) + ':' + pad(d.getMinutes()) + ':' + pad(d.getSeconds());
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+
+  // ---------- Log ----------
+  function addLogEntry(role, text){
+    if (logEmpty && logEmpty.parentNode){ logEmpty.remove(); }
+    var wrap = document.createElement('div');
+    wrap.className = 'log-entry log-entry--' + (role === 'user' ? 'user' : 'assistant');
+    var who = document.createElement('span');
+    who.className = 'who';
+    who.textContent = role === 'user' ? 'YOU' : 'JARVIS';
+    var txt = document.createElement('span');
+    txt.className = 'txt';
+    txt.textContent = text;
+    wrap.appendChild(who);
+    wrap.appendChild(txt);
+    logEl.appendChild(wrap);
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  // ---------- Persistence ----------
+  function persistHistory(){
+    if (!window.storage) return;
+    try { window.storage.set('jarvis-conversation', JSON.stringify(state.history.slice(-40)), false); } catch(err){}
+  }
+  function persistPrefs(){
+    if (!window.storage) return;
+    try {
+      window.storage.set('jarvis-prefs', JSON.stringify({ userName: state.userName, wakeWord: state.wakeWord, apiKey: state.apiKey }), false);
+    } catch(err){}
+  }
+  function loadHistory(){
+    if (!window.storage) return;
+    window.storage.get('jarvis-conversation', false).then(function(res){
+      if (res && res.value){
+        var arr = JSON.parse(res.value);
+        if (Array.isArray(arr)){
+          state.history = arr;
+          arr.forEach(function(m){ addLogEntry(m.role, m.content); });
+        }
+      }
+    }).catch(function(){});
+  }
+  function loadPrefs(){
+    if (!window.storage){ updateApiKeyNote(); return; }
+    window.storage.get('jarvis-prefs', false).then(function(res){
+      if (res && res.value){
+        var p = JSON.parse(res.value);
+        if (p.userName){ state.userName = p.userName; nameInput.value = p.userName; }
+        if (p.wakeWord){ state.wakeWord = p.wakeWord; wakeWordInput.value = p.wakeWord; }
+        if (p.apiKey){ state.apiKey = p.apiKey; apiKeyInput.value = p.apiKey; }
+      }
+      updateApiKeyNote();
+    }).catch(function(){});
+  }
+  function updateApiKeyNote(){
+    apiKeyNote.textContent = state.apiKey
+      ? 'Key saved on this device. Jarvis is ready to think.'
+      : 'Jarvis needs your own key to think. It\'s stored only on this device and sent straight to Anthropic — never anywhere else. Get one at console.anthropic.com.';
+    brandDot.classList.toggle('is-ready', !!state.apiKey);
+  }
+  function persistContacts(){
+    if (!window.storage) return;
+    try { window.storage.set('jarvis-contacts', JSON.stringify(state.contacts), false); } catch(err){}
+  }
+  function loadContacts(){
+    if (!window.storage){ renderContacts(); return; }
+    window.storage.get('jarvis-contacts', false).then(function(res){
+      if (res && res.value){
+        var arr = JSON.parse(res.value);
+        if (Array.isArray(arr)){ state.contacts = arr; }
+      }
+      renderContacts();
+    }).catch(function(){ renderContacts(); });
+  }
+  function renderContacts(){
+    contactsList.innerHTML = '';
+    if (!state.contacts.length){
+      var empty = document.createElement('div');
+      empty.className = 'contact-empty';
+      empty.textContent = 'No contacts saved yet.';
+      contactsList.appendChild(empty);
+      return;
+    }
+    state.contacts.forEach(function(c, idx){
+      var row = document.createElement('div');
+      row.className = 'contact-row';
+      var label = document.createElement('span');
+      label.textContent = c.name + ' — ' + c.phone;
+      var del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'contact-del';
+      del.setAttribute('aria-label', 'Remove ' + c.name);
+      del.textContent = '\u00D7';
+      del.addEventListener('click', function(){
+        state.contacts.splice(idx, 1);
+        persistContacts();
+        renderContacts();
+      });
+      row.appendChild(label);
+      row.appendChild(del);
+      contactsList.appendChild(row);
+    });
+  }
+
+  // ---------- Speech recognition (STT) ----------
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  function supportsSTT(){ return !!SR; }
+
+  function pauseListening(){
+    manualStop = true;
+    if (recognition && recognitionActive){ try { recognition.stop(); } catch(err){} }
+  }
+  function resumeIfActive(){
+    if (state.active){ startListening(); }
+  }
+
+  function startListening(){
+    if (!supportsSTT()) return;
+    manualStop = false;
+    clearNote();
+    recognition = new SR();
+    recognition.lang = 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognitionActive = true;
+    setStatus('listening');
+
+    recognition.onresult = function(e){
+      var interim = '', final = '';
+      for (var i = e.resultIndex; i < e.results.length; i++){
+        var t = e.results[i][0].transcript;
+        if (e.results[i].isFinal){ final += t; } else { interim += t; }
+      }
+      bumpEnergy();
+      if (interim){ updateCoreLabel(interim); }
+      if (final){ handleFinalTranscript(final.trim()); }
+    };
+
+    recognition.onerror = function(e){
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed'){
+        showNote('Microphone access was blocked — allow it in your browser settings to talk to Jarvis.');
+        goInactive();
+      }
+    };
+
+    recognition.onend = function(){
+      recognitionActive = false;
+      if (state.active && !manualStop){
+        try { startListening(); } catch(err){}
+      }
+    };
+
+    try { recognition.start(); } catch(err){}
+  }
+
+  function handleFinalTranscript(text){
+    var lower = text.toLowerCase();
+    var wake = state.wakeWord.toLowerCase();
+
+    if (state.awaitingCommand){
+      state.awaitingCommand = false;
+      pauseListening();
+      sendMessage(text);
+      return;
+    }
+
+    var idx = lower.indexOf(wake);
+    if (idx !== -1){
+      var rest = text.slice(idx + state.wakeWord.length).trim().replace(/^[,.:!?\s-]+/, '');
+      if (rest.length > 1){
+        pauseListening();
+        sendMessage(rest);
+      } else {
+        state.awaitingCommand = true;
+        haptic(15);
+        updateCoreLabel();
+        setTimeout(function(){
+          if (state.awaitingCommand){ state.awaitingCommand = false; updateCoreLabel(); }
+        }, 6000);
+      }
+    }
+    // no wake word heard — ignore, keep listening
+  }
+
+  // ---------- Speech synthesis (TTS) ----------
+  function loadVoices(){
+    if (!('speechSynthesis' in window)) return;
+    state.voices = speechSynthesis.getVoices();
+    populateVoiceSelect();
+  }
+  function populateVoiceSelect(){
+    voiceSelect.innerHTML = '';
+    var english = state.voices.filter(function(v){ return /^en/i.test(v.lang); });
+    var list = english.length ? english : state.voices;
+    list.forEach(function(v){
+      var opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = v.name + ' (' + v.lang + ')';
+      voiceSelect.appendChild(opt);
+    });
+    if (!state.selectedVoiceURI && list[0]){ state.selectedVoiceURI = list[0].voiceURI; }
+    voiceSelect.value = state.selectedVoiceURI || '';
+  }
+  if ('speechSynthesis' in window){
+    loadVoices();
+    speechSynthesis.onvoiceschanged = loadVoices;
+  }
+
+  function primeTTS(){
+    if (ttsPrimed || !('speechSynthesis' in window)) return;
+    ttsPrimed = true;
+    try { speechSynthesis.speak(new SpeechSynthesisUtterance('')); } catch(err){}
+  }
+  document.addEventListener('click', primeTTS, { once: true });
+
+  function afterSpeaking(){
+    if (state.active){ setStatus('listening'); resumeIfActive(); } else { goInactive(); }
+  }
+
+  function speak(text){
+    if (!('speechSynthesis' in window)){ afterSpeaking(); return; }
+    var utter = new SpeechSynthesisUtterance(text);
+    var voice = null;
+    for (var i = 0; i < state.voices.length; i++){
+      if (state.voices[i].voiceURI === state.selectedVoiceURI){ voice = state.voices[i]; break; }
+    }
+    if (voice){ utter.voice = voice; }
+    utter.rate = 1.02;
+    utter.onstart = function(){ setStatus('speaking'); };
+    utter.onboundary = function(){ bumpEnergy(); };
+    utter.onend = afterSpeaking;
+    utter.onerror = afterSpeaking;
+    speechSynthesis.speak(utter);
+  }
+
+  // ---------- Actions (call / text / WhatsApp) ----------
+  function findContact(name){
+    var lower = (name || '').trim().toLowerCase();
+    for (var i = 0; i < state.contacts.length; i++){
+      if (state.contacts[i].name.trim().toLowerCase() === lower){ return state.contacts[i]; }
+    }
+    return null;
+  }
+
+  function extractAction(fullText){
+    var nl = fullText.indexOf('\n');
+    var firstLine = nl === -1 ? fullText : fullText.slice(0, nl);
+    var rest = nl === -1 ? '' : fullText.slice(nl + 1).trim();
+    var m = firstLine.match(/^ACTION:CALL:(.+)$/);
+    if (m){ return { type: 'call', name: m[1].trim(), rest: rest }; }
+    m = firstLine.match(/^ACTION:TEXT:([^:]+):(.*)$/);
+    if (m){ return { type: 'text', name: m[1].trim(), message: m[2].trim(), rest: rest }; }
+    m = firstLine.match(/^ACTION:WHATSAPP:([^:]+):(.*)$/);
+    if (m){ return { type: 'whatsapp', name: m[1].trim(), message: m[2].trim(), rest: rest }; }
+    return null;
+  }
+
+  function performAction(action){
+    var contact = findContact(action.name);
+    if (!contact) return false;
+    var digits = contact.phone.replace(/[^\d+]/g, '');
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+    if (action.type === 'call'){
+      window.location.href = 'tel:' + digits;
+    } else if (action.type === 'text'){
+      window.location.href = 'sms:' + digits + (isIOS ? '&' : '?') + 'body=' + encodeURIComponent(action.message || '');
+    } else if (action.type === 'whatsapp'){
+      window.open('https://wa.me/' + digits.replace('+', '') + '?text=' + encodeURIComponent(action.message || ''), '_blank');
+    }
+    return true;
+  }
+
+  addContactBtn.addEventListener('click', function(){
+    var name = contactNameInput.value.trim();
+    var phone = contactPhoneInput.value.trim();
+    if (!name || !phone) return;
+    state.contacts.push({ name: name, phone: phone });
+    persistContacts();
+    renderContacts();
+    contactNameInput.value = '';
+    contactPhoneInput.value = '';
+  });
+
+  // ---------- Claude API ----------
+  function sendMessage(userText){
+    userText = (userText || '').trim();
+    if (!userText) return;
+    if (!state.apiKey){
+      showNote('Add your Anthropic API key in settings before Jarvis can think.');
+      settingsPanel.hidden = false;
+      apiKeyInput.focus();
+      return;
+    }
+    if (window.speechSynthesis && speechSynthesis.speaking){ speechSynthesis.cancel(); }
+    pauseListening();
+
+    addLogEntry('user', userText);
+    state.history.push({ role: 'user', content: userText });
+    persistHistory();
+    setStatus('thinking');
+
+    var payloadMessages = state.history.map(function(m){ return { role: m.role, content: m.content }; });
+
+    fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': state.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: systemPrompt(),
+        messages: payloadMessages,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }]
+      })
+    }).then(function(r){ return r.json(); }).then(function(data){
+      var text = '';
+      if (data && data.error){
+        afterSpeaking();
+        var errMsg = data.error.message || 'That request was rejected.';
+        addLogEntry('assistant', errMsg);
+        showNote(/api.?key|authent/i.test(errMsg) ? 'Check the API key in settings — Anthropic rejected it.' : errMsg);
+        return;
+      }
+      if (data && Array.isArray(data.content)){
+        text = data.content.map(function(b){ return b.type === 'text' ? b.text : ''; }).join('\n').trim();
+      }
+      if (!text){ text = 'I didn\'t catch a response there — try asking again.'; }
+
+      var spokenText = text;
+      var action = extractAction(text);
+      if (action){
+        var ok = performAction(action);
+        spokenText = ok
+          ? (action.rest || 'Done.')
+          : ('I don\'t have ' + action.name + ' saved as a contact yet — add them in settings and I can reach them.');
+      }
+
+      state.history.push({ role: 'assistant', content: spokenText });
+      persistHistory();
+      addLogEntry('assistant', spokenText);
+      speak(spokenText);
+    }).catch(function(){
+      afterSpeaking();
+      addLogEntry('assistant', 'Something went wrong reaching my brain just now. Try again in a moment.');
+    });
+  }
+
+  // ---------- Energy / audio readout ----------
+  function bumpEnergy(){ state.energy = 1; }
+  function energyLoop(){
+    requestAnimationFrame(energyLoop);
+    state.energy *= reducedMotion ? 0.8 : 0.93;
+    document.documentElement.style.setProperty('--energy', state.energy.toFixed(3));
+    var bars = Math.max(0, Math.min(8, Math.round(state.energy * 8)));
+    readoutAudio.textContent = '█'.repeat(bars) + '░'.repeat(8 - bars);
+  }
+  requestAnimationFrame(energyLoop);
+
+  // ---------- Wiring ----------
+  function haptic(ms){ if (navigator.vibrate){ try { navigator.vibrate(ms); } catch(err){} } }
+
+  orbBtn.addEventListener('click', function(){
+    haptic(12);
+    if (!supportsSTT()){
+      showNote('Voice input isn\'t supported in this browser — try Chrome, or type below.');
+      return;
+    }
+    if (state.active){
+      if (window.speechSynthesis){ speechSynthesis.cancel(); }
+      goInactive();
+      return;
+    }
+    if (state.status === 'thinking') return;
+    state.active = true;
+    startListening();
+  });
+
+  textForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    var val = textInput.value;
+    textInput.value = '';
+    sendMessage(val);
+  });
+
+  settingsBtn.addEventListener('click', function(){ settingsPanel.hidden = !settingsPanel.hidden; });
+  closeSettingsBtn.addEventListener('click', function(){ settingsPanel.hidden = true; });
+
+  apiKeyInput.addEventListener('change', function(){ state.apiKey = apiKeyInput.value.trim(); persistPrefs(); updateApiKeyNote(); });
+  nameInput.addEventListener('change', function(){ state.userName = nameInput.value.trim(); persistPrefs(); });
+  wakeWordInput.addEventListener('change', function(){
+    var v = wakeWordInput.value.trim();
+    if (v){ state.wakeWord = v; persistPrefs(); updateCoreLabel(); }
+  });
+  voiceSelect.addEventListener('change', function(){ state.selectedVoiceURI = voiceSelect.value; });
+
+  clearBtn.addEventListener('click', function(){
+    state.history = [];
+    logEl.innerHTML = '';
+    var empty = document.createElement('div');
+    empty.className = 'log-empty';
+    empty.id = 'logEmpty';
+    empty.textContent = 'No conversation yet.';
+    logEl.appendChild(empty);
+    logEmpty = empty;
+    if (window.storage){ window.storage.delete('jarvis-conversation', false).catch(function(){}); }
+  });
+
+  // ---------- Init ----------
+  if (!supportsSTT()){ sttNote.hidden = false; }
+  updateCoreLabel();
+  loadHistory();
+  loadPrefs();
+  loadContacts();
+
+  if ('serviceWorker' in navigator){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('sw.js').catch(function(){});
+    });
+  }
+})();
+</script>
+</body>
+</html>
